@@ -1,4 +1,4 @@
-const CACHE_NAME = 'deco-quiz-v1';
+const CACHE_NAME = 'deco-quiz-v2';
 const FILES_TO_CACHE = [
   './index.html',
   './style.css',
@@ -27,13 +27,20 @@ self.addEventListener('activate', (e) => {
 
 self.addEventListener('fetch', (e) => {
   e.respondWith(
-    caches.match(e.request).then((response) => {
-      if (response) return response;
-      // For navigation requests, fallback to cached index.html
-      if (e.request.mode === 'navigate') {
-        return caches.match('./index.html');
-      }
-      return fetch(e.request);
-    })
+    fetch(e.request)
+      .then((response) => {
+        // 网络成功时更新缓存
+        if (response.ok) {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(e.request, clone));
+        }
+        return response;
+      })
+      .catch(() => {
+        // 网络失败时用缓存
+        return caches.match(e.request).then((cached) => {
+          return cached || caches.match('./index.html');
+        });
+      })
   );
 });
