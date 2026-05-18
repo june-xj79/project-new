@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#1677ff">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>装饰工程练习题库</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- 首页 -->
+  <section id="view-home" class="view active">
+    <header class="app-header">
+      <h1>装饰工程练习题库</h1>
+    </header>
+    <div class="container">
+      <button id="btn-new-practice" class="btn-primary btn-large">
+        <span class="btn-icon">+</span> 新建练习
+      </button>
+      <h2 class="section-title">历史练习</h2>
+      <div id="history-list" class="history-list">
+        <p class="empty-tip">暂无历史练习记录</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 新建练习 -->
+  <section id="view-new-practice" class="view">
+    <header class="app-header">
+      <button class="btn-back" data-target="view-home">&#8249;</button>
+      <h1>新建练习</h1>
+    </header>
+    <div class="container">
+      <div class="form-group">
+        <label class="form-label">选择题型</label>
+        <div class="checkbox-group" id="type-group">
+          <label class="checkbox-item">
+            <input type="checkbox" value="单选题" checked>
+            <span class="checkbox-box"></span>
+            <span class="checkbox-text">单选题 <small class="count-badge">97</small></span>
+          </label>
+          <label class="checkbox-item">
+            <input type="checkbox" value="多选题" checked>
+            <span class="checkbox-box"></span>
+            <span class="checkbox-text">多选题 <small class="count-badge">10</small></span>
+          </label>
+          <label class="checkbox-item">
+            <input type="checkbox" value="判断题" checked>
+            <span class="checkbox-box"></span>
+            <span class="checkbox-text">判断题 <small class="count-badge">34</small></span>
+          </label>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">题目数量</label>
+        <div class="count-control">
+          <input type="range" id="count-slider" min="1" max="141" value="20" class="slider">
+          <input type="number" id="count-input" min="1" max="141" value="20" class="number-input">
+        </div>
+        <p class="form-hint">最多可选 <span id="max-count">141</span> 题</p>
+      </div>
+
+      <div class="form-group">
+        <label class="toggle-item">
+          <input type="checkbox" id="shuffle-toggle" checked>
+          <span class="toggle-track">
+            <span class="toggle-thumb"></span>
+          </span>
+          <span class="toggle-text">随机打乱题目顺序</span>
+        </label>
+      </div>
+
+      <button id="btn-start" class="btn-primary btn-large">开始练习</button>
+    </div>
+  </section>
+
+  <!-- 答题 -->
+  <section id="view-practice" class="view">
+    <header class="app-header">
+      <button class="btn-back" data-target="view-home">&#8249;</button>
+      <h1>练习中</h1>
+    </header>
+    <div class="container">
+      <div class="progress-bar">
+        <div class="progress-track">
+          <div class="progress-fill" id="progress-fill"></div>
+        </div>
+        <span class="progress-text" id="progress-text">第 1 / 20 题</span>
+      </div>
+
+      <div class="question-type" id="question-type">单选题</div>
+
+      <div class="question-card">
+        <div class="question-text" id="question-text"></div>
+        <div class="options-list" id="options-list"></div>
+        <div class="tf-buttons hidden" id="tf-buttons">
+          <button class="tf-btn" data-value="A">正确</button>
+          <button class="tf-btn" data-value="B">错误</button>
+        </div>
+      </div>
+
+      <div id="answer-feedback" class="answer-feedback hidden">
+        <div class="feedback-text" id="feedback-text"></div>
+        <div class="correct-answer" id="correct-answer"></div>
+      </div>
+
+      <div class="action-buttons">
+        <button id="btn-submit" class="btn-primary">提交答案</button>
+        <button id="btn-next" class="btn-secondary hidden">下一题</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 结果 -->
+  <section id="view-result" class="view">
+    <header class="app-header">
+      <button class="btn-back" data-target="view-home">&#8249;</button>
+      <h1>练习结果</h1>
+    </header>
+    <div class="container">
+      <div class="result-header">
+        <div class="result-icon">&#10003;</div>
+        <h2 class="result-title">练习完成！</h2>
+      </div>
+
+      <div class="result-stats">
+        <div class="stat-item">
+          <span class="stat-value" id="stat-total">20</span>
+          <span class="stat-label">总题数</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-value stat-correct" id="stat-correct">0</span>
+          <span class="stat-label">正确</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-value stat-wrong" id="stat-wrong">0</span>
+          <span class="stat-label">错误</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-value" id="stat-rate">0%</span>
+          <span class="stat-label">正确率</span>
+        </div>
+      </div>
+
+      <div class="result-actions">
+        <button id="btn-review" class="btn-secondary">查看错题</button>
+        <button id="btn-home" class="btn-primary">返回首页</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 错题回顾 -->
+  <section id="view-review" class="view">
+    <header class="app-header">
+      <button class="btn-back" data-target="view-result">&#8249;</button>
+      <h1>错题回顾</h1>
+    </header>
+    <div class="container">
+      <h2 class="section-title" id="wrong-count-title">共 0 道错题</h2>
+      <div id="wrong-list" class="wrong-list"></div>
+      <button id="btn-retry-wrong" class="btn-primary btn-large">重练错题</button>
+    </div>
+  </section>
+
+  <script src="questions.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
