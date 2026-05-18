@@ -563,6 +563,10 @@ body {
   color: #ff4d4f;
 }
 
+.feedback-text.partial {
+  color: #fa8c16;
+}
+
 .correct-answer {
   font-size: 14px;
   color: #666;
@@ -658,12 +662,10 @@ body {
   border-radius: 12px;
   padding: 16px;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  flex-direction: column;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
   cursor: pointer;
   transition: background 0.2s;
-  min-height: 64px;
 }
 
 .history-item:active {
@@ -690,6 +692,46 @@ body {
   font-size: 18px;
   font-weight: 700;
   color: #1677ff;
+}
+
+.history-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex: 1;
+  min-width: 0;
+}
+
+.history-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #f0f0f0;
+}
+
+.btn-action {
+  padding: 6px 12px;
+  font-size: 13px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.btn-view-wrong {
+  background: #e6f4ff;
+  color: #1677ff;
+}
+
+.btn-continue {
+  background: #f6ffed;
+  color: #52c41a;
+}
+
+.btn-delete {
+  background: #fff2f0;
+  color: #ff4d4f;
 }
 
 /* ===== Wrong Answers List ===== */

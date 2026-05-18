@@ -40,6 +40,13 @@ function getRecordById(id) {
   return loadRecords().find(r => r.id === id) || null;
 }
 
+function deleteRecord(id) {
+  if (!confirm('确定删除这条练习记录吗？')) return;
+  const records = loadRecords().filter(r => r.id !== id);
+  saveRecords(records);
+  renderHome();
+}
+
 // ===== Utility Functions =====
 function nowString() {
   const d = new Date();
@@ -66,6 +73,40 @@ function isCorrect(question, userAnswer) {
     return sortAnswer(question.answer) === sortAnswer(userAnswer);
   }
   return String(question.answer) === String(userAnswer);
+}
+
+// 判题结果: correct(完全正确), partial(部分正确-少选), missing(缺少的选项), extra(多选的选项)
+function checkAnswer(question, userAnswer) {
+  if (!userAnswer) {
+    return { correct: false, partial: false, missing: [], extra: [] };
+  }
+  if (question.type !== '多选题') {
+    const correct = String(question.answer) === String(userAnswer);
+    return { correct, partial: false, missing: [], extra: [] };
+  }
+  const correctSet = new Set(String(question.answer).split(''));
+  const userSet = new Set(String(userAnswer).split(''));
+  const extra = [...userSet].filter(c => !correctSet.has(c));
+  const missing = [...correctSet].filter(c => !userSet.has(c));
+  const correct = extra.length === 0 && missing.length === 0;
+  const partial = extra.length === 0 && missing.length > 0;
+  return { correct, partial, missing, extra };
+}
+
+// 获取某条记录的错题列表(支持未完成的练习)
+function getWrongList(record) {
+  if (record.status === 'finished') {
+    return record.wrongList || [];
+  }
+  // 未完成的练习,实时计算已答错题
+  const wrongList = [];
+  for (const q of record.questions) {
+    const userAns = record.userAnswers[q.id];
+    if (userAns && !isCorrect(q, userAns)) {
+      wrongList.push(q.id);
+    }
+  }
+  return wrongList;
 }
 
 // ===== Practice Builder =====
@@ -153,16 +194,24 @@ function renderHome() {
 
     return `
       <div class="history-item" data-id="${record.id}" data-status="${record.status}">
-        <div class="history-info">
-          <div class="history-date">${record.createdAt}</div>
-          <div class="history-detail">${detailText}</div>
+        <div class="history-main" data-id="${record.id}" data-status="${record.status}">
+          <div class="history-info">
+            <div class="history-date">${record.createdAt}</div>
+            <div class="history-detail">${detailText}</div>
+          </div>
+          <div class="history-score">${scoreText}</div>
         </div>
-        <div class="history-score">${scoreText}</div>
+        <div class="history-actions">
+          <button class="btn-action btn-view-wrong" data-id="${record.id}">错题</button>
+          ${!isFinished ? `<button class="btn-action btn-continue" data-id="${record.id}">继续</button>` : ''}
+          <button class="btn-action btn-delete" data-id="${record.id}">删除</button>
+        </div>
       </div>
     `;
   }).join('');
 
-  listEl.querySelectorAll('.history-item').forEach(item => {
+  // 点击主区域: 已完成 → 查看错题, 未完成 → 继续练习
+  listEl.querySelectorAll('.history-main').forEach(item => {
     item.addEventListener('click', () => {
       const id = item.dataset.id;
       const status = item.dataset.status;
@@ -173,6 +222,32 @@ function renderHome() {
       } else {
         startPractice(record);
       }
+    });
+  });
+
+  // 查看错题按钮
+  listEl.querySelectorAll('.btn-view-wrong').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const record = getRecordById(btn.dataset.id);
+      if (record) showReview(record);
+    });
+  });
+
+  // 继续按钮(未完成)
+  listEl.querySelectorAll('.btn-continue').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const record = getRecordById(btn.dataset.id);
+      if (record) startPractice(record);
+    });
+  });
+
+  // 删除按钮
+  listEl.querySelectorAll('.btn-delete').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      deleteRecord(btn.dataset.id);
     });
   });
 }
@@ -267,7 +342,7 @@ function handleAnswer(answer) {
   hasSubmitted = true;
 
   const q = currentPractice.questions[currentQuestionIndex];
-  const correct = isCorrect(q, answer);
+  const result = checkAnswer(q, answer);
 
   // Save answer
   currentPractice.userAnswers[q.id] = answer;
@@ -281,7 +356,7 @@ function handleAnswer(answer) {
       const val = btn.dataset.value;
       if (val === String(q.answer)) {
         btn.classList.add('correct');
-      } else if (val === String(answer) && !correct) {
+      } else if (val === String(answer) && !result.correct) {
         btn.classList.add('wrong');
       }
     });
@@ -304,12 +379,16 @@ function handleAnswer(answer) {
   const correctAnswerEl = document.getElementById('correct-answer');
 
   feedbackEl.classList.remove('hidden');
-  if (correct) {
-    feedbackText.textContent = '回答正确';
+  if (result.correct) {
+    feedbackText.textContent = '✅ 回答正确';
     feedbackText.className = 'feedback-text correct';
     correctAnswerEl.textContent = '';
+  } else if (result.partial) {
+    feedbackText.textContent = '⚠️ 部分正确';
+    feedbackText.className = 'feedback-text partial';
+    correctAnswerEl.textContent = `正确答案: ${q.answer}（缺少: ${result.missing.join('、')}）`;
   } else {
-    feedbackText.textContent = '回答错误';
+    feedbackText.textContent = '❌ 回答错误';
     feedbackText.className = 'feedback-text wrong';
     correctAnswerEl.textContent = `正确答案: ${q.answer}`;
   }
@@ -369,12 +448,12 @@ function showResult(record) {
 function showReview(record) {
   showView('review');
 
-  const wrongIds = record.wrongList || [];
+  const wrongIds = getWrongList(record);
   document.getElementById('wrong-count-title').textContent = `共 ${wrongIds.length} 道错题`;
 
   const wrongListEl = document.getElementById('wrong-list');
   if (wrongIds.length === 0) {
-    wrongListEl.innerHTML = '<p class="empty-tip">本次全对!</p>';
+    wrongListEl.innerHTML = '<p class="empty-tip">暂无错题</p>';
     document.getElementById('btn-retry-wrong').classList.add('hidden');
     return;
   }
@@ -383,10 +462,12 @@ function showReview(record) {
     .filter(q => wrongIds.includes(q.id))
     .map(q => {
       const userAns = record.userAnswers[q.id] || '未作答';
+      const result = checkAnswer(q, userAns);
+      const partialHint = result.partial ? `（缺少: ${result.missing.join('、')}）` : '';
       return `
         <div class="wrong-item">
           <div class="wrong-question">${q.title || q.question}</div>
-          <div class="wrong-answer user-answer">你的答案: ${userAns}</div>
+          <div class="wrong-answer user-answer">你的答案: ${userAns}${partialHint}</div>
           <div class="wrong-answer correct-answer-text">正确答案: ${q.answer}</div>
         </div>
       `;
