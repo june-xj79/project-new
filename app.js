@@ -1,6 +1,11 @@
 // ===== Constants =====
 const STORAGE_KEY = 'practice_records';
 
+// ===== Global State =====
+let currentPractice = null;
+let currentQuestionIndex = 0;
+let hasSubmitted = false;
+
 // ===== Storage Layer =====
 function loadRecords() {
   try {
@@ -172,20 +177,227 @@ function renderHome() {
   });
 }
 
-// ===== Placeholders for functions implemented in next task =====
+// ===== Practice View Functions =====
 function startPractice(record) {
-  // TODO: implemented in next task
-  console.log('startPractice', record);
+  currentPractice = record;
+  currentQuestionIndex = 0;
+  hasSubmitted = false;
+  showView('practice');
+  renderCurrentQuestion();
 }
 
-function showReview(record) {
-  // TODO: implemented in next task
-  console.log('showReview', record);
+function renderCurrentQuestion() {
+  hasSubmitted = false;
+  const q = currentPractice.questions[currentQuestionIndex];
+  const total = currentPractice.questions.length;
+
+  // Update progress
+  document.getElementById('progress-text').textContent = `第 ${currentQuestionIndex + 1} / ${total} 题`;
+  document.getElementById('progress-fill').style.width = `${((currentQuestionIndex + 1) / total) * 100}%`;
+
+  // Update question type
+  const typeMap = { '单选题': '单选', '多选题': '多选', '判断题': '判断' };
+  document.getElementById('question-type').textContent = typeMap[q.type] || q.type;
+
+  // Update question text
+  document.getElementById('question-text').textContent = q.title || q.question;
+
+  // Render options based on type
+  const optionsList = document.getElementById('options-list');
+  const tfButtons = document.getElementById('tf-buttons');
+
+  if (q.type === '判断题') {
+    optionsList.classList.add('hidden');
+    tfButtons.classList.remove('hidden');
+    const tfOpts = Array.isArray(q.options) ? q.options : [{key:'A',text:'正确'},{key:'B',text:'错误'}];
+    tfButtons.querySelectorAll('.tf-btn').forEach((btn, i) => {
+      btn.classList.remove('disabled', 'correct', 'wrong');
+      btn.disabled = false;
+      const opt = tfOpts[i];
+      if (opt) {
+        btn.dataset.value = opt.key;
+        btn.textContent = opt.text;
+      }
+      // Remove old listener and add new one
+      const newBtn = btn.cloneNode(true);
+      btn.parentNode.replaceChild(newBtn, btn);
+      newBtn.addEventListener('click', () => {
+        if (hasSubmitted) return;
+        handleAnswer(newBtn.dataset.value);
+      });
+    });
+  } else {
+    tfButtons.classList.add('hidden');
+    optionsList.classList.remove('hidden');
+    optionsList.innerHTML = '';
+    const options = Array.isArray(q.options)
+      ? q.options.reduce((obj, opt) => { obj[opt.key] = opt.text; return obj; }, {})
+      : q.options;
+    Object.entries(options).forEach(([key, text]) => {
+      const div = document.createElement('div');
+      div.className = 'option-item';
+      div.dataset.value = key;
+      div.innerHTML = `<span class="option-key">${key}</span><span class="option-text">${text}</span>`;
+      div.addEventListener('click', () => {
+        if (hasSubmitted) return;
+        if (q.type === '单选题') {
+          handleAnswer(key);
+        } else if (q.type === '多选题') {
+          div.classList.toggle('selected');
+        }
+      });
+      optionsList.appendChild(div);
+    });
+  }
+
+  // Hide feedback and next button
+  document.getElementById('answer-feedback').classList.add('hidden');
+  document.getElementById('btn-next').classList.add('hidden');
+
+  // Show submit only for multi-select
+  if (q.type === '多选题') {
+    document.getElementById('btn-submit').classList.remove('hidden');
+  } else {
+    document.getElementById('btn-submit').classList.add('hidden');
+  }
+}
+
+function handleAnswer(answer) {
+  if (hasSubmitted) return;
+  hasSubmitted = true;
+
+  const q = currentPractice.questions[currentQuestionIndex];
+  const correct = isCorrect(q, answer);
+
+  // Save answer
+  currentPractice.userAnswers[q.id] = answer;
+  saveRecord(currentPractice);
+
+  // Visual feedback
+  if (q.type === '判断题') {
+    document.getElementById('tf-buttons').querySelectorAll('.tf-btn').forEach(btn => {
+      btn.classList.add('disabled');
+      btn.disabled = true;
+      const val = btn.dataset.value;
+      if (val === String(q.answer)) {
+        btn.classList.add('correct');
+      } else if (val === String(answer) && !correct) {
+        btn.classList.add('wrong');
+      }
+    });
+  } else {
+    const correctAnswer = String(q.answer);
+    document.querySelectorAll('.option-item').forEach(item => {
+      item.classList.add('disabled');
+      const val = item.dataset.value;
+      if (correctAnswer.includes(val)) {
+        item.classList.add('correct');
+      } else if (String(answer).includes(val)) {
+        item.classList.add('wrong');
+      }
+    });
+  }
+
+  // Show feedback
+  const feedbackEl = document.getElementById('answer-feedback');
+  const feedbackText = document.getElementById('feedback-text');
+  const correctAnswerEl = document.getElementById('correct-answer');
+
+  feedbackEl.classList.remove('hidden');
+  if (correct) {
+    feedbackText.textContent = '回答正确';
+    feedbackText.className = 'feedback-text correct';
+    correctAnswerEl.textContent = '';
+  } else {
+    feedbackText.textContent = '回答错误';
+    feedbackText.className = 'feedback-text wrong';
+    correctAnswerEl.textContent = `正确答案: ${q.answer}`;
+  }
+
+  // Show next button
+  const btnNext = document.getElementById('btn-next');
+  btnNext.classList.remove('hidden');
+  if (currentQuestionIndex >= currentPractice.questions.length - 1) {
+    btnNext.textContent = '查看结果';
+  } else {
+    btnNext.textContent = '下一题';
+  }
+
+  // Hide submit button
+  document.getElementById('btn-submit').classList.add('hidden');
+}
+
+function finishPractice() {
+  const wrongList = [];
+  currentPractice.questions.forEach(q => {
+    const userAns = currentPractice.userAnswers[q.id];
+    if (!isCorrect(q, userAns)) {
+      wrongList.push(q.id);
+    }
+  });
+
+  currentPractice.wrongList = wrongList;
+  currentPractice.wrongCount = wrongList.length;
+  currentPractice.status = 'finished';
+  currentPractice.finishedAt = nowString();
+  saveRecord(currentPractice);
+  showResult(currentPractice);
 }
 
 function showResult(record) {
-  // TODO: implemented in next task
-  console.log('showResult', record);
+  showView('result');
+
+  const total = record.totalCount;
+  const wrong = record.wrongCount;
+  const correct = total - wrong;
+  const rate = total > 0 ? Math.round((correct / total) * 100) : 0;
+
+  document.getElementById('stat-total').textContent = total;
+  document.getElementById('stat-correct').textContent = correct;
+  document.getElementById('stat-wrong').textContent = wrong;
+  document.getElementById('stat-rate').textContent = `${rate}%`;
+
+  const btnReview = document.getElementById('btn-review');
+  if (wrong > 0) {
+    btnReview.classList.remove('hidden');
+    btnReview.onclick = () => showReview(record);
+  } else {
+    btnReview.classList.add('hidden');
+  }
+}
+
+function showReview(record) {
+  showView('review');
+
+  const wrongIds = record.wrongList || [];
+  document.getElementById('wrong-count-title').textContent = `共 ${wrongIds.length} 道错题`;
+
+  const wrongListEl = document.getElementById('wrong-list');
+  if (wrongIds.length === 0) {
+    wrongListEl.innerHTML = '<p class="empty-tip">本次全对!</p>';
+    document.getElementById('btn-retry-wrong').classList.add('hidden');
+    return;
+  }
+
+  wrongListEl.innerHTML = record.questions
+    .filter(q => wrongIds.includes(q.id))
+    .map(q => {
+      const userAns = record.userAnswers[q.id] || '未作答';
+      return `
+        <div class="wrong-item">
+          <div class="wrong-question">${q.title || q.question}</div>
+          <div class="wrong-answer user-answer">你的答案: ${userAns}</div>
+          <div class="wrong-answer correct-answer-text">正确答案: ${q.answer}</div>
+        </div>
+      `;
+    }).join('');
+
+  document.getElementById('btn-retry-wrong').classList.remove('hidden');
+  document.getElementById('btn-retry-wrong').onclick = () => {
+    const reviewPractice = createReviewPractice(record);
+    saveRecord(reviewPractice);
+    startPractice(reviewPractice);
+  };
 }
 
 // ===== New Practice Page UI Helpers =====
@@ -273,6 +485,66 @@ document.addEventListener('DOMContentLoaded', () => {
       if (isNaN(val) || val < 1) val = 1;
       if (val > max) val = max;
       countSlider.value = val;
+    });
+  }
+
+  // Start practice button
+  const btnStart = document.getElementById('btn-start');
+  if (btnStart) {
+    btnStart.addEventListener('click', () => {
+      const types = getSelectedTypes();
+      if (types.length === 0) {
+        alert('请至少选择一种题型');
+        return;
+      }
+      const countInput = document.getElementById('count-input');
+      const shuffleToggle = document.getElementById('shuffle-toggle');
+      const config = {
+        types,
+        count: parseInt(countInput.value, 10),
+        random: shuffleToggle.checked
+      };
+      const record = createPractice(config);
+      saveRecord(record);
+      startPractice(record);
+    });
+  }
+
+  // Submit button (multi-select only)
+  const btnSubmit = document.getElementById('btn-submit');
+  if (btnSubmit) {
+    btnSubmit.addEventListener('click', () => {
+      const selected = Array.from(document.querySelectorAll('.option-item.selected'))
+        .map(el => el.dataset.value)
+        .sort()
+        .join('');
+      if (!selected) {
+        alert('请至少选择一个选项');
+        return;
+      }
+      handleAnswer(selected);
+    });
+  }
+
+  // Next button
+  const btnNext = document.getElementById('btn-next');
+  if (btnNext) {
+    btnNext.addEventListener('click', () => {
+      if (currentQuestionIndex >= currentPractice.questions.length - 1) {
+        finishPractice();
+      } else {
+        currentQuestionIndex++;
+        renderCurrentQuestion();
+      }
+    });
+  }
+
+  // Home button on result page
+  const btnHome = document.getElementById('btn-home');
+  if (btnHome) {
+    btnHome.addEventListener('click', () => {
+      showView('home');
+      renderHome();
     });
   }
 
