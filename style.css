@@ -780,3 +780,40 @@ body {
     height: calc(56px + env(safe-area-inset-top));
   }
 }
+
+/* ===== PWA & Polish ===== */
+
+/* 禁用文本选择(提升点击体验) */
+.option-item, .tf-btn, .btn-primary, .btn-secondary, .history-item {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* 平滑过渡 */
+.option-item, .tf-btn, .btn-primary, .btn-secondary {
+  transition: all 0.15s ease;
+}
+
+/* 选项 Hover(桌面端) */
+@media (hover: hover) {
+  .option-item:hover:not(.disabled) {
+    border-color: #1677ff;
+  }
+}
+
+/* 结果页数字高亮 */
+#stat-rate { color: #1677ff; font-weight: 600; }
+
+/* 错题页正确答案高亮 */
+.correct-answer-display { color: #52c41a; font-weight: 500; }
+.user-answer-display { color: #ff4d4f; }
+
+/* 空状态 */
+.empty-state {
+  text-align: center; padding: 40px 20px;
+  color: #999;
+}
+
+/* 滚动优化 */
+html { scroll-behavior: smooth; }
+body { overscroll-behavior-y: contain; }
