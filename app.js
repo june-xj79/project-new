@@ -5,6 +5,7 @@ const STORAGE_KEY = 'practice_records';
 let currentPractice = null;
 let currentQuestionIndex = 0;
 let hasSubmitted = false;
+let lastViewId = 'home';
 
 // ===== Storage Layer =====
 function loadRecords() {
@@ -138,7 +139,7 @@ function createPractice(config) {
 }
 
 function createReviewPractice(sourceRecord) {
-  const wrongIds = sourceRecord.wrongList || [];
+  const wrongIds = getWrongList(sourceRecord);
   const questions = sourceRecord.questions.filter(q => wrongIds.includes(q.id));
   return {
     id: String(Date.now()),
@@ -158,6 +159,11 @@ function createReviewPractice(sourceRecord) {
 
 // ===== View Switching =====
 function showView(viewId) {
+  // 记录上一个视图
+  const active = document.querySelector('.view.active');
+  if (active) {
+    lastViewId = active.id.replace('view-', '');
+  }
   document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
   const target = document.getElementById(`view-${viewId}`);
   if (target) {
@@ -448,6 +454,12 @@ function showResult(record) {
 function showReview(record) {
   showView('review');
 
+  // 动态设置返回按钮目标
+  const backBtn = document.querySelector('#view-review .btn-back');
+  if (backBtn) {
+    backBtn.dataset.target = `view-${lastViewId}`;
+  }
+
   const wrongIds = getWrongList(record);
   document.getElementById('wrong-count-title').textContent = `共 ${wrongIds.length} 道错题`;
 
@@ -546,11 +558,17 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // Back buttons to home
-  document.querySelectorAll('.btn-back[data-target="view-home"]').forEach(btn => {
+  // Back buttons — support any data-target
+  document.querySelectorAll('.btn-back').forEach(btn => {
     btn.addEventListener('click', () => {
-      showView('home');
-      renderHome();
+      const target = btn.dataset.target;
+      if (target) {
+        const viewId = target.replace('view-', '');
+        showView(viewId);
+        if (viewId === 'home') {
+          renderHome();
+        }
+      }
     });
   });
 
