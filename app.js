@@ -261,7 +261,10 @@ function renderHome() {
 // ===== Practice View Functions =====
 function startPractice(record) {
   currentPractice = record;
-  currentQuestionIndex = 0;
+  // 找到第一个未答题目，实现"继续"功能
+  const answeredIds = new Set(Object.keys(record.userAnswers || {}).map(String));
+  currentQuestionIndex = record.questions.findIndex(q => !answeredIds.has(String(q.id)));
+  if (currentQuestionIndex < 0) currentQuestionIndex = 0;
   hasSubmitted = false;
   showView('practice');
   renderCurrentQuestion();
