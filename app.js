@@ -407,14 +407,29 @@ function startWrongPractice(record, mode) {
     return;
   }
 
-  // 快照当前未销项的错题列表，练习过程中不再变化
-  // 这样做对的题被标记为已销项后，进度条和总题数不会跳动
-  wrongPracticeSnapshot = [...remainingWrongIds];
+  // 检查是否有上次未完成的快照（持久化到 record，退出后再进入仍可用）
+  // 如果有且进度未满，复用旧快照；否则生成新快照
+  const existingSnapshot = record.wrongPractice && record.wrongPractice.snapshot;
+  const hasExistingSnapshot = existingSnapshot &&
+                               existingSnapshot.length > 0 &&
+                               (record.wrongPractice.currentIndex || 0) < existingSnapshot.length;
+
+  if (hasExistingSnapshot) {
+    // 继续上次的练习：复用旧快照，总题数保持不变
+    wrongPracticeSnapshot = existingSnapshot;
+  } else {
+    // 开始新的练习：生成新快照并持久化
+    wrongPracticeSnapshot = [...remainingWrongIds];
+    record.wrongPractice.snapshot = wrongPracticeSnapshot;
+    record.wrongPractice.currentIndex = 0;
+    record.wrongPractice.answers = {};
+    saveRecord(record);
+  }
 
   // 从上次进度继续（但如果上次已完成，从头开始）
   let startIndex = record.wrongPractice.currentIndex || 0;
   if (startIndex >= wrongPracticeSnapshot.length) {
-    startIndex = 0;  // 已完成一轮，从头开始
+    startIndex = 0;
   }
   currentQuestionIndex = startIndex;
   hasSubmitted = false;
@@ -427,6 +442,7 @@ function startWrongPractice(record, mode) {
 function resetWrongPractice(record) {
   record.wrongPractice.currentIndex = 0;     // 重置进度到第一题
   record.wrongPractice.answers = {};         // 清空答题记录
+  record.wrongPractice.snapshot = [];        // 清空快照，下次进入时重新生成
   record.eliminatedWrongIds = [];            // 清空已销项标记，恢复删除线和徽章
   saveRecord(record);
 }
@@ -436,8 +452,18 @@ function renderCurrentQuestion() {
 
   let q, total;
   if (isWrongPractice) {
-    // 错题练习模式：从快照中取题（练习开始时固定，不会因销项而变化）
+    // 错题练习模式：从快照中取题（快照持久化到 record，不因退出而重新生成）
     total = wrongPracticeSnapshot.length;
+
+    // 跳过已销项的题：连续销项后 currentIndex 可能指向已销项的题，自动跳到下一道
+    while (currentQuestionIndex < total) {
+      const qid = wrongPracticeSnapshot[currentQuestionIndex];
+      if (!currentPractice.eliminatedWrongIds.includes(qid)) {
+        break;
+      }
+      currentQuestionIndex++;
+    }
+
     if (currentQuestionIndex >= total) {
       // 所有错题已答完，结束错题练习
       finishWrongPractice();
@@ -680,13 +706,14 @@ function finishWrongPractice() {
   // 保存记录
   saveRecord(currentPractice);
 
-  // 重置错题练习模式，但保留进度（下次可以继续）
-  // 注意：currentIndex 和 answers 保留，方便用户查看本次练习的情况
+  // 清空快照（练习已完成，下次重新开始时生成新快照）
+  currentPractice.wrongPractice.snapshot = [];
   currentPractice.wrongPractice.mode = null;
   saveRecord(currentPractice);
 
   // 重置全局状态
   isWrongPractice = false;
+  wrongPracticeSnapshot = [];
 
   // 回到错题回顾页面
   showReview(currentPractice);
