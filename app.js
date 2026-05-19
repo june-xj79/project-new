@@ -246,25 +246,21 @@ function renderHome() {
   listEl.innerHTML = sorted.map(record => {
     const isFinished = record.status === 'finished';
     const answeredCount = Object.keys(record.userAnswers || {}).length;
-    const detailText = isFinished
-      ? `${record.totalCount}题 · 错${record.wrongCount}题`
-      : `${record.totalCount}题 · (未完成 · 已答 ${answeredCount}/${record.totalCount})`;
-    let scoreText;
-    if (isFinished) {
-      scoreText = `${Math.round(((record.totalCount - record.wrongCount) / record.totalCount) * 100)}%`;
-    } else {
-      const acc = calcAccuracy(record);
-      scoreText = acc !== null ? `${acc}%` : '进行中';
-    }
+    const progressText = isFinished ? '已完成' : `已答 ${answeredCount}/${record.totalCount}`;
+    const acc = calcAccuracy(record);
+    const accuracyText = acc !== null ? `正确率 ${acc}%` : '未开始';
 
     return `
       <div class="history-item" data-id="${record.id}" data-status="${record.status}">
         <div class="history-main" data-id="${record.id}" data-status="${record.status}">
           <div class="history-info">
             <div class="history-date">${record.createdAt}</div>
-            <div class="history-detail">${detailText}</div>
+            <div class="history-detail">${record.totalCount}题 · ${progressText}</div>
           </div>
-          <div class="history-score">${scoreText}</div>
+          <div class="history-stats">
+            <div class="history-stat-row">${progressText}</div>
+            <div class="history-stat-row ${acc !== null && acc >= 80 ? 'stat-high' : acc !== null && acc >= 60 ? 'stat-mid' : acc !== null ? 'stat-low' : ''}">${accuracyText}</div>
+          </div>
         </div>
         <div class="history-actions">
           <button class="btn-action btn-view-wrong" data-id="${record.id}">错题</button>
