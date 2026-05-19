@@ -6,6 +6,7 @@ let currentPractice = null;
 let currentQuestionIndex = 0;
 let hasSubmitted = false;
 let lastViewId = 'home';
+let currentBankId = null;
 
 // ===== Storage Layer =====
 function loadRecords() {
@@ -48,6 +49,19 @@ function deleteRecord(id) {
   renderHome();
 }
 
+// ===== Data Migration =====
+function migrateRecords() {
+  const records = loadRecords();
+  let dirty = false;
+  for (const r of records) {
+    if (!r.bankId) {
+      r.bankId = 'mid-engineer';
+      dirty = true;
+    }
+  }
+  if (dirty) saveRecords(records);
+}
+
 // ===== Utility Functions =====
 function nowString() {
   const d = new Date();
@@ -66,6 +80,10 @@ function shuffleArray(arr) {
 
 function sortAnswer(ans) {
   return String(ans).split('').sort().join('');
+}
+
+function getCurrentBank() {
+  return BANKS.find(b => b.id === currentBankId) || null;
 }
 
 function isCorrect(question, userAnswer) {
@@ -111,9 +129,12 @@ function getWrongList(record) {
 }
 
 // ===== Practice Builder =====
-function buildPractice(allQuestions, config) {
-  const { types, count, random } = config;
-  let filtered = allQuestions.filter(q => types.includes(q.type));
+function buildPractice(bank, config) {
+  const { types, count, random, chapters } = config;
+  let filtered = bank.questions.filter(q => types.includes(q.type));
+  if (bank.hasChapters && chapters && chapters.length > 0) {
+    filtered = filtered.filter(q => chapters.includes(q.chapter));
+  }
   if (random) {
     filtered = shuffleArray(filtered);
   }
@@ -121,9 +142,11 @@ function buildPractice(allQuestions, config) {
 }
 
 function createPractice(config) {
-  const questions = buildPractice(QUESTIONS, config);
+  const bank = getCurrentBank();
+  const questions = buildPractice(bank, config);
   return {
     id: String(Date.now()),
+    bankId: currentBankId,
     createdAt: nowString(),
     finishedAt: null,
     status: 'in_progress',
@@ -143,6 +166,7 @@ function createReviewPractice(sourceRecord) {
   const questions = sourceRecord.questions.filter(q => wrongIds.includes(q.id));
   return {
     id: String(Date.now()),
+    bankId: sourceRecord.bankId,
     createdAt: nowString(),
     finishedAt: null,
     status: 'in_progress',
@@ -155,6 +179,33 @@ function createReviewPractice(sourceRecord) {
     totalCount: questions.length,
     wrongCount: 0
   };
+}
+
+// ===== Bank List View =====
+function renderBankList() {
+  const listEl = document.getElementById('bank-list');
+  if (!BANKS || !BANKS.length) {
+    listEl.innerHTML = '<p class="empty-tip">暂无题库</p>';
+    return;
+  }
+  listEl.innerHTML = BANKS.map(b => `
+    <div class="bank-item" data-id="${b.id}">
+      <div class="bank-info">
+        <div class="bank-name">📚 ${b.name}</div>
+        <div class="bank-count">${b.questions.length} 题</div>
+      </div>
+      <div class="bank-arrow">›</div>
+    </div>
+  `).join('');
+  listEl.querySelectorAll('.bank-item').forEach(el => {
+    el.addEventListener('click', () => enterBank(el.dataset.id));
+  });
+}
+
+function enterBank(bankId) {
+  currentBankId = bankId;
+  showView('home');
+  renderHome();
 }
 
 // ===== View Switching =====
@@ -174,7 +225,11 @@ function showView(viewId) {
 
 // ===== Home View Rendering =====
 function renderHome() {
-  const records = loadRecords();
+  const bank = getCurrentBank();
+  if (bank) {
+    document.getElementById('home-title').textContent = bank.name;
+  }
+  const records = loadRecords().filter(r => r.bankId === currentBankId);
   const listEl = document.getElementById('history-list');
 
   if (!records.length) {
@@ -498,8 +553,10 @@ function showReview(record) {
 
 // ===== New Practice Page UI Helpers =====
 function updateNewPracticeUI() {
+  const bank = getCurrentBank();
+  const questions = bank ? bank.questions : [];
   const typeCounts = {};
-  QUESTIONS.forEach(q => {
+  questions.forEach(q => {
     typeCounts[q.type] = (typeCounts[q.type] || 0) + 1;
   });
 
@@ -511,6 +568,38 @@ function updateNewPracticeUI() {
       badge.textContent = typeCounts[type] || 0;
     }
   });
+
+  updateChapterUI();
+}
+
+function updateChapterUI() {
+  const bank = getCurrentBank();
+  const wrapper = document.getElementById('chapter-group-wrapper');
+  const group = document.getElementById('chapter-group');
+
+  if (!bank || !bank.hasChapters) {
+    wrapper.style.display = 'none';
+    group.innerHTML = '';
+    return;
+  }
+
+  wrapper.style.display = '';
+  group.innerHTML = bank.chapters.map((ch) => `
+    <label class="checkbox-item">
+      <input type="checkbox" value="${ch}" checked>
+      <span class="checkbox-box"></span>
+      <span class="checkbox-text">${ch}</span>
+    </label>
+  `).join('');
+
+  group.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+    cb.addEventListener('change', updateMaxCount);
+  });
+}
+
+function getSelectedChapters() {
+  const checkboxes = document.querySelectorAll('#chapter-group input[type="checkbox"]:checked');
+  return Array.from(checkboxes).map(cb => cb.value);
 }
 
 function getSelectedTypes() {
@@ -521,7 +610,15 @@ function getSelectedTypes() {
 function getMaxCount() {
   const types = getSelectedTypes();
   if (!types.length) return 0;
-  return QUESTIONS.filter(q => types.includes(q.type)).length;
+  const bank = getCurrentBank();
+  if (!bank) return 0;
+  let filtered = bank.questions.filter(q => types.includes(q.type));
+  if (bank.hasChapters) {
+    const chapters = getSelectedChapters();
+    if (chapters.length === 0) return 0;
+    filtered = filtered.filter(q => chapters.includes(q.chapter));
+  }
+  return filtered.length;
 }
 
 function updateMaxCount() {
@@ -558,6 +655,8 @@ document.addEventListener('DOMContentLoaded', () => {
     btnNewPractice.addEventListener('click', () => {
       showView('new-practice');
       updateNewPracticeUI();
+      updateChapterUI();
+      updateMaxCount();
     });
   }
 
@@ -570,6 +669,10 @@ document.addEventListener('DOMContentLoaded', () => {
         showView(viewId);
         if (viewId === 'home') {
           renderHome();
+        }
+        if (viewId === 'bank-list') {
+          currentBankId = null;
+          renderBankList();
         }
       }
     });
@@ -606,12 +709,22 @@ document.addEventListener('DOMContentLoaded', () => {
         alert('请至少选择一种题型');
         return;
       }
+      const bank = getCurrentBank();
+      let chapters = null;
+      if (bank && bank.hasChapters) {
+        chapters = getSelectedChapters();
+        if (chapters.length === 0) {
+          alert('请至少选择一个章节');
+          return;
+        }
+      }
       const countInput = document.getElementById('count-input');
       const shuffleToggle = document.getElementById('shuffle-toggle');
       const config = {
         types,
         count: parseInt(countInput.value, 10),
-        random: shuffleToggle.checked
+        random: shuffleToggle.checked,
+        chapters
       };
       const record = createPractice(config);
       saveRecord(record);
@@ -658,5 +771,6 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // Initialize
-  renderHome();
+  migrateRecords();
+  renderBankList();
 });
