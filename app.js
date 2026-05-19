@@ -527,6 +527,15 @@ function handleAnswer(answer) {
   if (isWrongPractice) {
     // 更新错题练习进度
     currentPractice.wrongPractice.currentIndex = currentQuestionIndex + 1;
+
+    // 销项模式：做对的题即时标记为已销项（做一道显示一道）
+    if (currentPractice.wrongPractice.mode === 'eliminate' && result.correct) {
+      const remainingWrongIds = getRemainingWrongList(currentPractice);
+      const qid = remainingWrongIds[currentQuestionIndex];
+      if (qid && !currentPractice.eliminatedWrongIds.includes(qid)) {
+        currentPractice.eliminatedWrongIds.push(qid);
+      }
+    }
   }
   saveRecord(currentPractice);
 
@@ -622,25 +631,20 @@ function finishPractice() {
 function finishWrongPractice() {
   const mode = currentPractice.wrongPractice.mode;
 
-  // 销项模式：把做对的题加入 eliminatedWrongIds
+  // 销项模式：把做对的题加入 eliminatedWrongIds（仅标记，不移除 wrongList）
   if (mode === 'eliminate') {
     const remainingWrongIds = getRemainingWrongList(currentPractice);
     remainingWrongIds.forEach(qid => {
       const q = currentPractice.questions.find(question => question.id === qid);
       const userAns = currentPractice.wrongPractice.answers[qid];
       if (isCorrect(q, userAns)) {
-        // 做对了，销项
+        // 做对了，标记为已销项
         if (!currentPractice.eliminatedWrongIds.includes(qid)) {
           currentPractice.eliminatedWrongIds.push(qid);
         }
       }
     });
-
-    // 从 wrongList 中移除已销项的（保持 wrongList 和 eliminatedWrongIds 同步）
-    currentPractice.wrongList = currentPractice.wrongList.filter(id =>
-      !currentPractice.eliminatedWrongIds.includes(id)
-    );
-    currentPractice.wrongCount = currentPractice.wrongList.length;
+    // 注意：wrongList 保持不变，已销项的题目通过 eliminatedWrongIds 标记
   }
 
   // 保存记录
@@ -694,16 +698,14 @@ function showReview(record) {
   const eliminatedCount = record.eliminatedWrongIds ? record.eliminatedWrongIds.length : 0;
 
   document.getElementById('wrong-count-title').textContent =
-    `共 ${wrongIds.length} 道错题 · 未销项 ${remainingWrongIds.length} 道 · 已销项 ${eliminatedCount} 道`;
+    `共 ${wrongIds.length} 道错题 · 已销项 ${eliminatedCount} 道`;
 
   const wrongListEl = document.getElementById('wrong-list');
-  const btnRetry = document.getElementById('btn-retry-wrong');
   const btnEliminate = document.getElementById('btn-eliminate-wrong');
   const btnRestart = document.getElementById('btn-restart-wrong');
 
   if (wrongIds.length === 0) {
     wrongListEl.innerHTML = '<p class="empty-tip">暂无错题</p>';
-    btnRetry.classList.add('hidden');
     if (btnEliminate) btnEliminate.classList.add('hidden');
     if (btnRestart) btnRestart.classList.add('hidden');
     return;
@@ -730,13 +732,7 @@ function showReview(record) {
       `;
     }).join('');
 
-  // 重练错题：在原记录上练习错题，不影响销项状态（不创建新记录）
-  btnRetry.classList.remove('hidden');
-  btnRetry.onclick = () => {
-    startWrongPractice(record, 'review');
-  };
-
-  // 销项练习：在原记录上练习错题，做对的题会被销项（不创建新记录）
+  // 销项练习：在原记录上练习错题，做对的题会被标记为已销项（不创建新记录）
   if (btnEliminate) {
     if (remainingWrongIds.length > 0) {
       btnEliminate.classList.remove('hidden');
