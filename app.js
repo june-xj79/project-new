@@ -456,7 +456,12 @@ function renderCurrentQuestion() {
   document.getElementById('progress-fill').style.width = `${((currentQuestionIndex + 1) / total) * 100}%`;
 
   // Update accuracy
-  updateAccuracyDisplay(calcAccuracy(currentPractice));
+  // 销项模式显示销项练习的正确率，主练习显示主练习的正确率
+  if (isWrongPractice) {
+    updateAccuracyDisplay(calcWrongPracticeAccuracy(currentPractice));
+  } else {
+    updateAccuracyDisplay(calcAccuracy(currentPractice));
+  }
 
   // Update question type
   const typeMap = { '单选题': '单选', '多选题': '多选', '判断题': '判断' };
