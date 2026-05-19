@@ -249,9 +249,13 @@ function renderHome() {
     const detailText = isFinished
       ? `${record.totalCount}题 · 错${record.wrongCount}题`
       : `${record.totalCount}题 · (未完成 · 已答 ${answeredCount}/${record.totalCount})`;
-    const scoreText = isFinished
-      ? `${Math.round(((record.totalCount - record.wrongCount) / record.totalCount) * 100)}%`
-      : '进行中';
+    let scoreText;
+    if (isFinished) {
+      scoreText = `${Math.round(((record.totalCount - record.wrongCount) / record.totalCount) * 100)}%`;
+    } else {
+      const acc = calcAccuracy(record);
+      scoreText = acc !== null ? `${acc}%` : '进行中';
+    }
 
     return `
       <div class="history-item" data-id="${record.id}" data-status="${record.status}">
@@ -313,6 +317,34 @@ function renderHome() {
   });
 }
 
+// ===== Accuracy Helpers =====
+function calcAccuracy(record) {
+  const answered = Object.keys(record.userAnswers || {});
+  if (!answered.length) return null;
+  let correct = 0;
+  for (const q of record.questions) {
+    if (record.userAnswers[q.id] && isCorrect(q, record.userAnswers[q.id])) {
+      correct++;
+    }
+  }
+  return Math.round((correct / answered.length) * 100);
+}
+
+function updateAccuracyDisplay(accuracy) {
+  const el = document.getElementById('accuracy-bar');
+  if (!el) return;
+  if (accuracy === null) {
+    el.textContent = '正确率: --';
+    el.className = 'accuracy-bar';
+    return;
+  }
+  el.textContent = `正确率: ${accuracy}%`;
+  el.className = 'accuracy-bar';
+  if (accuracy >= 80) el.classList.add('accuracy-high');
+  else if (accuracy >= 60) el.classList.add('accuracy-mid');
+  else el.classList.add('accuracy-low');
+}
+
 // ===== Practice View Functions =====
 function startPractice(record) {
   currentPractice = record;
@@ -333,6 +365,9 @@ function renderCurrentQuestion() {
   // Update progress
   document.getElementById('progress-text').textContent = `第 ${currentQuestionIndex + 1} / ${total} 题`;
   document.getElementById('progress-fill').style.width = `${((currentQuestionIndex + 1) / total) * 100}%`;
+
+  // Update accuracy
+  updateAccuracyDisplay(calcAccuracy(currentPractice));
 
   // Update question type
   const typeMap = { '单选题': '单选', '多选题': '多选', '判断题': '判断' };
@@ -436,6 +471,9 @@ function handleAnswer(answer) {
       }
     });
   }
+
+  // Update accuracy after answering
+  updateAccuracyDisplay(calcAccuracy(currentPractice));
 
   // Show feedback
   const feedbackEl = document.getElementById('answer-feedback');

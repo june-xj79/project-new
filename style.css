@@ -860,6 +860,30 @@ body {
 html { scroll-behavior: smooth; }
 body { overscroll-behavior-y: contain; }
 
+/* ===== Accuracy Bar ===== */
+.accuracy-bar {
+  font-size: 13px;
+  color: #666;
+  text-align: right;
+  margin-bottom: 12px;
+  margin-top: -8px;
+}
+
+.accuracy-bar.accuracy-high {
+  color: #52c41a;
+  font-weight: 600;
+}
+
+.accuracy-bar.accuracy-mid {
+  color: #fa8c16;
+  font-weight: 600;
+}
+
+.accuracy-bar.accuracy-low {
+  color: #ff4d4f;
+  font-weight: 600;
+}
+
 /* ===== Bank List ===== */
 .bank-list {
   display: flex;
