@@ -7,6 +7,7 @@ let currentQuestionIndex = 0;
 let hasSubmitted = false;
 let lastViewId = 'home';
 let currentBankId = null;
+let isWrongPractice = false;  // 是否处于错题练习模式（在原记录上练习错题）
 
 // ===== Storage Layer =====
 function loadRecords() {
@@ -54,8 +55,18 @@ function migrateRecords() {
   const records = loadRecords();
   let dirty = false;
   for (const r of records) {
+    // 旧记录没有 bankId，自动归到中级工程师
     if (!r.bankId) {
       r.bankId = 'mid-engineer';
+      dirty = true;
+    }
+    // 初始化错题练习相关字段
+    if (!r.eliminatedWrongIds) {
+      r.eliminatedWrongIds = [];
+      dirty = true;
+    }
+    if (!r.wrongPractice) {
+      r.wrongPractice = { mode: null, currentIndex: 0, answers: {} };
       dirty = true;
     }
   }
@@ -144,6 +155,13 @@ function getWrongList(record) {
   return wrongList;
 }
 
+// 获取未销项的错题列表（排除已销项的）
+function getRemainingWrongList(record) {
+  const wrongIds = getWrongList(record);
+  const eliminated = record.eliminatedWrongIds || [];
+  return wrongIds.filter(id => !eliminated.includes(id));
+}
+
 // ===== Practice Builder =====
 function buildPractice(bank, config) {
   const { types, count, random, chapters } = config;
@@ -172,48 +190,8 @@ function createPractice(config) {
     questions,
     userAnswers: {},
     wrongList: [],
-    totalCount: questions.length,
-    wrongCount: 0
-  };
-}
-
-// 创建"重练错题"练习：完成后不影响原记录的错题列表
-function createReviewPractice(sourceRecord) {
-  const wrongIds = getWrongList(sourceRecord);
-  const questions = sourceRecord.questions.filter(q => wrongIds.includes(q.id));
-  return {
-    id: String(Date.now()),
-    bankId: sourceRecord.bankId,
-    createdAt: nowString(),
-    finishedAt: null,
-    status: 'in_progress',
-    config: { ...sourceRecord.config },
-    source: 'review',
-    sourcePracticeId: sourceRecord.id,
-    questions,
-    userAnswers: {},
-    wrongList: [],
-    totalCount: questions.length,
-    wrongCount: 0
-  };
-}
-
-// 创建"销项练习"：完成后把做对的题从原记录的错题列表中移除
-function createEliminatePractice(sourceRecord) {
-  const wrongIds = getWrongList(sourceRecord);
-  const questions = sourceRecord.questions.filter(q => wrongIds.includes(q.id));
-  return {
-    id: String(Date.now()),
-    bankId: sourceRecord.bankId,
-    createdAt: nowString(),
-    finishedAt: null,
-    status: 'in_progress',
-    config: { ...sourceRecord.config },
-    source: 'eliminate',     // 标记为销项模式
-    sourcePracticeId: sourceRecord.id,
-    questions,
-    userAnswers: {},
-    wrongList: [],
+    eliminatedWrongIds: [],
+    wrongPractice: { mode: null, currentIndex: 0, answers: {} },
     totalCount: questions.length,
     wrongCount: 0
   };
@@ -380,8 +358,11 @@ function updateAccuracyDisplay(accuracy) {
 }
 
 // ===== Practice View Functions =====
+
+// 开始主练习（未完成练习继续）
 function startPractice(record) {
   currentPractice = record;
+  isWrongPractice = false;
   // 找到第一个未答题目，实现"继续"功能
   const answeredIds = new Set(Object.keys(record.userAnswers || {}).map(String));
   currentQuestionIndex = record.questions.findIndex(q => !answeredIds.has(String(q.id)));
@@ -391,10 +372,62 @@ function startPractice(record) {
   renderCurrentQuestion();
 }
 
+// 开始错题练习（在原记录上练习错题，不创建新记录）
+function startWrongPractice(record, mode) {
+  currentPractice = record;
+  isWrongPractice = true;
+
+  // 设置错题练习模式
+  record.wrongPractice.mode = mode;
+
+  // 获取未销项的错题列表
+  const remainingWrongIds = getRemainingWrongList(record);
+
+  // 如果所有错题都已销项，提示用户
+  if (remainingWrongIds.length === 0) {
+    alert('所有错题已销项，无需练习');
+    return;
+  }
+
+  // 从上次进度继续（但如果上次已完成，从头开始）
+  let startIndex = record.wrongPractice.currentIndex || 0;
+  if (startIndex >= remainingWrongIds.length) {
+    startIndex = 0;  // 已完成一轮，从头开始
+  }
+  currentQuestionIndex = startIndex;
+  hasSubmitted = false;
+
+  showView('practice');
+  renderCurrentQuestion();
+}
+
+// 重置错题练习进度（重新开始）
+function resetWrongPractice(record) {
+  record.wrongPractice.currentIndex = 0;
+  record.wrongPractice.answers = {};
+  saveRecord(record);
+}
+
 function renderCurrentQuestion() {
   hasSubmitted = false;
-  const q = currentPractice.questions[currentQuestionIndex];
-  const total = currentPractice.questions.length;
+
+  let q, total;
+  if (isWrongPractice) {
+    // 错题练习模式：从原记录的错题列表中取题（排除已销项的）
+    const remainingWrongIds = getRemainingWrongList(currentPractice);
+    total = remainingWrongIds.length;
+    if (currentQuestionIndex >= total) {
+      // 所有错题已答完，结束错题练习
+      finishWrongPractice();
+      return;
+    }
+    const qid = remainingWrongIds[currentQuestionIndex];
+    q = currentPractice.questions.find(question => question.id === qid);
+  } else {
+    // 主练习模式：从全部题目中取题
+    q = currentPractice.questions[currentQuestionIndex];
+    total = currentPractice.questions.length;
+  }
 
   // Update progress
   document.getElementById('progress-text').textContent = `第 ${currentQuestionIndex + 1} / ${total} 题`;
@@ -474,11 +507,27 @@ function handleAnswer(answer) {
   if (hasSubmitted) return;
   hasSubmitted = true;
 
-  const q = currentPractice.questions[currentQuestionIndex];
+  let q;
+  if (isWrongPractice) {
+    // 错题练习模式：从错题列表中取题
+    const remainingWrongIds = getRemainingWrongList(currentPractice);
+    const qid = remainingWrongIds[currentQuestionIndex];
+    q = currentPractice.questions.find(question => question.id === qid);
+    // 答案存入 wrongPractice.answers
+    currentPractice.wrongPractice.answers[qid] = answer;
+  } else {
+    // 主练习模式
+    q = currentPractice.questions[currentQuestionIndex];
+    currentPractice.userAnswers[q.id] = answer;
+  }
+
   const result = checkAnswer(q, answer);
 
   // Save answer
-  currentPractice.userAnswers[q.id] = answer;
+  if (isWrongPractice) {
+    // 更新错题练习进度
+    currentPractice.wrongPractice.currentIndex = currentQuestionIndex + 1;
+  }
   saveRecord(currentPractice);
 
   // Visual feedback
@@ -532,7 +581,16 @@ function handleAnswer(answer) {
   // Show next button
   const btnNext = document.getElementById('btn-next');
   btnNext.classList.remove('hidden');
-  if (currentQuestionIndex >= currentPractice.questions.length - 1) {
+
+  // 判断是否是最后一题
+  let total;
+  if (isWrongPractice) {
+    total = getRemainingWrongList(currentPractice).length;
+  } else {
+    total = currentPractice.questions.length;
+  }
+
+  if (currentQuestionIndex >= total - 1) {
     btnNext.textContent = '查看结果';
   } else {
     btnNext.textContent = '下一题';
@@ -542,16 +600,13 @@ function handleAnswer(answer) {
   document.getElementById('btn-submit').classList.add('hidden');
 }
 
-// 完成练习，保存结果；销项模式下会把做对的题从原记录错题列表中移除
+// 完成主练习
 function finishPractice() {
   const wrongList = [];
-  const correctList = [];
   currentPractice.questions.forEach(q => {
     const userAns = currentPractice.userAnswers[q.id];
-    if (isCorrect(q, userAns)) {
-      correctList.push(q.id);   // 本次做对的题
-    } else {
-      wrongList.push(q.id);     // 仍然做错的题
+    if (!isCorrect(q, userAns)) {
+      wrongList.push(q.id);
     }
   });
 
@@ -560,19 +615,47 @@ function finishPractice() {
   currentPractice.status = 'finished';
   currentPractice.finishedAt = nowString();
   saveRecord(currentPractice);
+  showResult(currentPractice);
+}
 
-  // 销项模式：从原记录的 wrongList 中移除本次做对的题
-  if (currentPractice.source === 'eliminate' && currentPractice.sourcePracticeId) {
-    const sourceRecord = getRecordById(currentPractice.sourcePracticeId);
-    if (sourceRecord) {
-      // 过滤掉本次做对的题，保留仍然做错的题
-      sourceRecord.wrongList = sourceRecord.wrongList.filter(id => !correctList.includes(id));
-      sourceRecord.wrongCount = sourceRecord.wrongList.length;
-      saveRecord(sourceRecord);
-    }
+// 完成错题练习（在原记录上，不创建新记录）
+function finishWrongPractice() {
+  const mode = currentPractice.wrongPractice.mode;
+
+  // 销项模式：把做对的题加入 eliminatedWrongIds
+  if (mode === 'eliminate') {
+    const remainingWrongIds = getRemainingWrongList(currentPractice);
+    remainingWrongIds.forEach(qid => {
+      const q = currentPractice.questions.find(question => question.id === qid);
+      const userAns = currentPractice.wrongPractice.answers[qid];
+      if (isCorrect(q, userAns)) {
+        // 做对了，销项
+        if (!currentPractice.eliminatedWrongIds.includes(qid)) {
+          currentPractice.eliminatedWrongIds.push(qid);
+        }
+      }
+    });
+
+    // 从 wrongList 中移除已销项的（保持 wrongList 和 eliminatedWrongIds 同步）
+    currentPractice.wrongList = currentPractice.wrongList.filter(id =>
+      !currentPractice.eliminatedWrongIds.includes(id)
+    );
+    currentPractice.wrongCount = currentPractice.wrongList.length;
   }
 
-  showResult(currentPractice);
+  // 保存记录
+  saveRecord(currentPractice);
+
+  // 重置错题练习模式，但保留进度（下次可以继续）
+  // 注意：currentIndex 和 answers 保留，方便用户查看本次练习的情况
+  currentPractice.wrongPractice.mode = null;
+  saveRecord(currentPractice);
+
+  // 重置全局状态
+  isWrongPractice = false;
+
+  // 回到错题回顾页面
+  showReview(currentPractice);
 }
 
 function showResult(record) {
@@ -607,19 +690,26 @@ function showReview(record) {
   }
 
   const wrongIds = getWrongList(record);
-  document.getElementById('wrong-count-title').textContent = `共 ${wrongIds.length} 道错题`;
+  const remainingWrongIds = getRemainingWrongList(record);
+  const eliminatedCount = record.eliminatedWrongIds ? record.eliminatedWrongIds.length : 0;
+
+  document.getElementById('wrong-count-title').textContent =
+    `共 ${wrongIds.length} 道错题 · 未销项 ${remainingWrongIds.length} 道 · 已销项 ${eliminatedCount} 道`;
 
   const wrongListEl = document.getElementById('wrong-list');
   const btnRetry = document.getElementById('btn-retry-wrong');
   const btnEliminate = document.getElementById('btn-eliminate-wrong');
+  const btnRestart = document.getElementById('btn-restart-wrong');
 
   if (wrongIds.length === 0) {
     wrongListEl.innerHTML = '<p class="empty-tip">暂无错题</p>';
     btnRetry.classList.add('hidden');
     if (btnEliminate) btnEliminate.classList.add('hidden');
+    if (btnRestart) btnRestart.classList.add('hidden');
     return;
   }
 
+  // 渲染错题列表，已销项的显示删除线
   wrongListEl.innerHTML = record.questions
     .filter(q => wrongIds.includes(q.id))
     .map(q => {
@@ -628,30 +718,45 @@ function showReview(record) {
       const partialHint = result.partial ? `（缺少: ${result.missing.join('、')}）` : '';
       const userAnsDetail = formatAnswerDetail(q, userAns);
       const correctAnsDetail = formatAnswerDetail(q, q.answer);
+      const isEliminated = record.eliminatedWrongIds && record.eliminatedWrongIds.includes(q.id);
+      const eliminatedClass = isEliminated ? ' eliminated' : '';
+      const eliminatedBadge = isEliminated ? '<span class="eliminated-badge">已销项</span>' : '';
       return `
-        <div class="wrong-item">
-          <div class="wrong-question">${q.title || q.question}</div>
+        <div class="wrong-item${eliminatedClass}">
+          <div class="wrong-question">${eliminatedBadge}${q.title || q.question}</div>
           <div class="wrong-answer user-answer">你的答案: ${userAnsDetail}${partialHint}</div>
           <div class="wrong-answer correct-answer-text">正确答案: ${correctAnsDetail}</div>
         </div>
       `;
     }).join('');
 
-  // 重练错题：完成后不影响原记录的错题列表
+  // 重练错题：在原记录上练习错题，不影响销项状态（不创建新记录）
   btnRetry.classList.remove('hidden');
   btnRetry.onclick = () => {
-    const reviewPractice = createReviewPractice(record);
-    saveRecord(reviewPractice);
-    startPractice(reviewPractice);
+    startWrongPractice(record, 'review');
   };
 
-  // 销项练习：完成后把做对的题从原记录错题列表中移除
+  // 销项练习：在原记录上练习错题，做对的题会被销项（不创建新记录）
   if (btnEliminate) {
-    btnEliminate.classList.remove('hidden');
-    btnEliminate.onclick = () => {
-      const eliminatePractice = createEliminatePractice(record);
-      saveRecord(eliminatePractice);
-      startPractice(eliminatePractice);
+    if (remainingWrongIds.length > 0) {
+      btnEliminate.classList.remove('hidden');
+      btnEliminate.onclick = () => {
+        startWrongPractice(record, 'eliminate');
+      };
+    } else {
+      btnEliminate.classList.add('hidden');
+    }
+  }
+
+  // 重新开始：重置错题练习进度
+  if (btnRestart) {
+    btnRestart.classList.remove('hidden');
+    btnRestart.onclick = () => {
+      if (confirm('确定要重置错题练习进度吗？')) {
+        resetWrongPractice(record);
+        alert('错题练习进度已重置');
+        showReview(record);
+      }
     };
   }
 }
@@ -857,11 +962,23 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnNext = document.getElementById('btn-next');
   if (btnNext) {
     btnNext.addEventListener('click', () => {
-      if (currentQuestionIndex >= currentPractice.questions.length - 1) {
-        finishPractice();
+      if (isWrongPractice) {
+        // 错题练习模式
+        const total = getRemainingWrongList(currentPractice).length;
+        if (currentQuestionIndex >= total - 1) {
+          finishWrongPractice();
+        } else {
+          currentQuestionIndex++;
+          renderCurrentQuestion();
+        }
       } else {
-        currentQuestionIndex++;
-        renderCurrentQuestion();
+        // 主练习模式
+        if (currentQuestionIndex >= currentPractice.questions.length - 1) {
+          finishPractice();
+        } else {
+          currentQuestionIndex++;
+          renderCurrentQuestion();
+        }
       }
     });
   }

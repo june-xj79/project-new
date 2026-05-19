@@ -797,6 +797,29 @@ body {
   color: #52c41a;
 }
 
+/* 已销项的错题：显示删除线和灰色 */
+.wrong-item.eliminated {
+  opacity: 0.6;
+  background: #f8f8f8;
+}
+
+.wrong-item.eliminated .wrong-question {
+  text-decoration: line-through;
+  color: #999;
+}
+
+.eliminated-badge {
+  display: inline-block;
+  background: #52c41a;
+  color: #fff;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  margin-right: 8px;
+  font-weight: 500;
+  text-decoration: none;
+}
+
 .wrong-answer-row {
   display: flex;
   gap: 16px;
