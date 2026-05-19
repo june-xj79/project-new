@@ -650,6 +650,13 @@ body {
   gap: 12px;
 }
 
+/* ===== Review Page ===== */
+.review-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
 /* ===== History List ===== */
 .history-list {
   display: flex;
