@@ -401,10 +401,11 @@ function startWrongPractice(record, mode) {
   renderCurrentQuestion();
 }
 
-// 重置错题练习进度（重新开始）
+// 重置错题练习进度和销项状态（重新开始）
 function resetWrongPractice(record) {
-  record.wrongPractice.currentIndex = 0;
-  record.wrongPractice.answers = {};
+  record.wrongPractice.currentIndex = 0;     // 重置进度到第一题
+  record.wrongPractice.answers = {};         // 清空答题记录
+  record.eliminatedWrongIds = [];            // 清空已销项标记，恢复删除线和徽章
   saveRecord(record);
 }
 
