@@ -8,6 +8,7 @@ let hasSubmitted = false;
 let lastViewId = 'home';
 let currentBankId = null;
 let isWrongPractice = false;  // 是否处于错题练习模式（在原记录上练习错题）
+let wrongPracticeSnapshot = [];  // 销项练习开始时的错题快照，练习过程中不变
 
 // ===== Storage Layer =====
 function loadRecords() {
@@ -330,6 +331,8 @@ function renderHome() {
 }
 
 // ===== Accuracy Helpers =====
+
+// 计算主练习的正确率
 function calcAccuracy(record) {
   const answered = Object.keys(record.userAnswers || {});
   if (!answered.length) return null;
@@ -340,6 +343,21 @@ function calcAccuracy(record) {
     }
   }
   return Math.round((correct / answered.length) * 100);
+}
+
+// 计算销项练习的正确率（基于 wrongPractice.answers）
+function calcWrongPracticeAccuracy(record) {
+  const answers = record.wrongPractice ? record.wrongPractice.answers : {};
+  const answeredIds = Object.keys(answers);
+  if (!answeredIds.length) return null;
+  let correct = 0;
+  for (const qid of answeredIds) {
+    const q = record.questions.find(question => question.id === Number(qid) || question.id === qid);
+    if (q && isCorrect(q, answers[qid])) {
+      correct++;
+    }
+  }
+  return Math.round((correct / answeredIds.length) * 100);
 }
 
 function updateAccuracyDisplay(accuracy) {
@@ -389,9 +407,13 @@ function startWrongPractice(record, mode) {
     return;
   }
 
+  // 快照当前未销项的错题列表，练习过程中不再变化
+  // 这样做对的题被标记为已销项后，进度条和总题数不会跳动
+  wrongPracticeSnapshot = [...remainingWrongIds];
+
   // 从上次进度继续（但如果上次已完成，从头开始）
   let startIndex = record.wrongPractice.currentIndex || 0;
-  if (startIndex >= remainingWrongIds.length) {
+  if (startIndex >= wrongPracticeSnapshot.length) {
     startIndex = 0;  // 已完成一轮，从头开始
   }
   currentQuestionIndex = startIndex;
@@ -414,15 +436,14 @@ function renderCurrentQuestion() {
 
   let q, total;
   if (isWrongPractice) {
-    // 错题练习模式：从原记录的错题列表中取题（排除已销项的）
-    const remainingWrongIds = getRemainingWrongList(currentPractice);
-    total = remainingWrongIds.length;
+    // 错题练习模式：从快照中取题（练习开始时固定，不会因销项而变化）
+    total = wrongPracticeSnapshot.length;
     if (currentQuestionIndex >= total) {
       // 所有错题已答完，结束错题练习
       finishWrongPractice();
       return;
     }
-    const qid = remainingWrongIds[currentQuestionIndex];
+    const qid = wrongPracticeSnapshot[currentQuestionIndex];
     q = currentPractice.questions.find(question => question.id === qid);
   } else {
     // 主练习模式：从全部题目中取题
@@ -510,9 +531,8 @@ function handleAnswer(answer) {
 
   let q;
   if (isWrongPractice) {
-    // 错题练习模式：从错题列表中取题
-    const remainingWrongIds = getRemainingWrongList(currentPractice);
-    const qid = remainingWrongIds[currentQuestionIndex];
+    // 错题练习模式：从快照中取题
+    const qid = wrongPracticeSnapshot[currentQuestionIndex];
     q = currentPractice.questions.find(question => question.id === qid);
     // 答案存入 wrongPractice.answers
     currentPractice.wrongPractice.answers[qid] = answer;
@@ -531,8 +551,7 @@ function handleAnswer(answer) {
 
     // 销项模式：做对的题即时标记为已销项（做一道显示一道）
     if (currentPractice.wrongPractice.mode === 'eliminate' && result.correct) {
-      const remainingWrongIds = getRemainingWrongList(currentPractice);
-      const qid = remainingWrongIds[currentQuestionIndex];
+      const qid = wrongPracticeSnapshot[currentQuestionIndex];
       if (qid && !currentPractice.eliminatedWrongIds.includes(qid)) {
         currentPractice.eliminatedWrongIds.push(qid);
       }
@@ -566,7 +585,12 @@ function handleAnswer(answer) {
   }
 
   // Update accuracy after answering
-  updateAccuracyDisplay(calcAccuracy(currentPractice));
+  // 销项模式显示销项练习的正确率，主练习显示主练习的正确率
+  if (isWrongPractice) {
+    updateAccuracyDisplay(calcWrongPracticeAccuracy(currentPractice));
+  } else {
+    updateAccuracyDisplay(calcAccuracy(currentPractice));
+  }
 
   // Show feedback
   const feedbackEl = document.getElementById('answer-feedback');
@@ -595,7 +619,7 @@ function handleAnswer(answer) {
   // 判断是否是最后一题
   let total;
   if (isWrongPractice) {
-    total = getRemainingWrongList(currentPractice).length;
+    total = wrongPracticeSnapshot.length;  // 用快照长度，不会因销项而变化
   } else {
     total = currentPractice.questions.length;
   }
@@ -960,9 +984,8 @@ document.addEventListener('DOMContentLoaded', () => {
   if (btnNext) {
     btnNext.addEventListener('click', () => {
       if (isWrongPractice) {
-        // 错题练习模式
-        const total = getRemainingWrongList(currentPractice).length;
-        if (currentQuestionIndex >= total - 1) {
+        // 错题练习模式：用快照长度判断是否完成
+        if (currentQuestionIndex >= wrongPracticeSnapshot.length - 1) {
           finishWrongPractice();
         } else {
           currentQuestionIndex++;
