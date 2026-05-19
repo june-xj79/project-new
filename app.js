@@ -112,6 +112,22 @@ function checkAnswer(question, userAnswer) {
   return { correct, partial, missing, extra };
 }
 
+// 将答案字母转为带选项文本的展示字符串
+function formatAnswerDetail(question, answer) {
+  if (!answer || answer === '未作答') return '未作答';
+  if (question.type === '判断题') return answer;
+
+  const optionMap = {};
+  if (Array.isArray(question.options)) {
+    question.options.forEach(opt => { optionMap[opt.key] = opt.text; });
+  }
+
+  return String(answer).split('').map(ch => {
+    const text = optionMap[ch];
+    return text ? `${ch}. ${text}` : ch;
+  }).join('  ');
+}
+
 // 获取某条记录的错题列表(支持未完成的练习)
 function getWrongList(record) {
   if (record.status === 'finished') {
@@ -568,11 +584,13 @@ function showReview(record) {
       const userAns = record.userAnswers[q.id] || '未作答';
       const result = checkAnswer(q, userAns);
       const partialHint = result.partial ? `（缺少: ${result.missing.join('、')}）` : '';
+      const userAnsDetail = formatAnswerDetail(q, userAns);
+      const correctAnsDetail = formatAnswerDetail(q, q.answer);
       return `
         <div class="wrong-item">
           <div class="wrong-question">${q.title || q.question}</div>
-          <div class="wrong-answer user-answer">你的答案: ${userAns}${partialHint}</div>
-          <div class="wrong-answer correct-answer-text">正确答案: ${q.answer}</div>
+          <div class="wrong-answer user-answer">你的答案: ${userAnsDetail}${partialHint}</div>
+          <div class="wrong-answer correct-answer-text">正确答案: ${correctAnsDetail}</div>
         </div>
       `;
     }).join('');

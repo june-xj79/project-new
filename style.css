@@ -776,6 +776,20 @@ body {
   margin-bottom: 12px;
 }
 
+.wrong-answer {
+  font-size: 14px;
+  line-height: 1.6;
+  margin-bottom: 6px;
+}
+
+.wrong-answer.user-answer {
+  color: #ff4d4f;
+}
+
+.wrong-answer.correct-answer-text {
+  color: #52c41a;
+}
+
 .wrong-answer-row {
   display: flex;
   gap: 16px;
