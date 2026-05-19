@@ -6,15 +6,28 @@
   <meta name="theme-color" content="#1677ff">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <title>装饰工程练习题库</title>
+  <title>工程师练习题库</title>
   <link rel="manifest" href="manifest.json">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <!-- 首页 -->
-  <section id="view-home" class="view active">
+  <!-- 题库列表 -->
+  <section id="view-bank-list" class="view active">
     <header class="app-header">
-      <h1>装饰工程练习题库</h1>
+      <h1>工程师练习题库</h1>
+    </header>
+    <div class="container">
+      <div id="bank-list" class="bank-list">
+        <p class="empty-tip">暂无题库</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 首页 -->
+  <section id="view-home" class="view">
+    <header class="app-header">
+      <button class="btn-back" data-target="view-bank-list">&#8249;</button>
+      <h1 id="home-title">题库</h1>
     </header>
     <div class="container">
       <button id="btn-new-practice" class="btn-primary btn-large">
@@ -52,6 +65,12 @@
             <span class="checkbox-box"></span>
             <span class="checkbox-text">判断题 <small class="count-badge">34</small></span>
           </label>
+        </div>
+      </div>
+
+      <div class="form-group" id="chapter-group-wrapper" style="display:none;">
+        <label class="form-label">选择章节</label>
+        <div class="checkbox-group" id="chapter-group">
         </div>
       </div>
 
