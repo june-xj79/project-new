@@ -859,3 +859,44 @@ body {
 /* 滚动优化 */
 html { scroll-behavior: smooth; }
 body { overscroll-behavior-y: contain; }
+
+/* ===== Bank List ===== */
+.bank-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.bank-item {
+  background: #fff;
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  transition: background 0.2s;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+}
+
+.bank-item:active {
+  background: #f8f8f8;
+}
+
+.bank-name {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1a1a1a;
+  margin-bottom: 4px;
+}
+
+.bank-count {
+  font-size: 13px;
+  color: #999;
+}
+
+.bank-arrow {
+  font-size: 20px;
+  color: #999;
+  font-weight: 300;
+}
