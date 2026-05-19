@@ -1,4 +1,4 @@
-const CACHE_NAME = 'deco-quiz-v2';
+const CACHE_NAME = 'deco-quiz-v3';
 const FILES_TO_CACHE = [
   './index.html',
   './style.css',

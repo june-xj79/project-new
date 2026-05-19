@@ -1,6 +1,6 @@
 {
-  "name": "装饰工程练习题库",
-  "short_name": "装饰题库",
+  "name": "工程师练习题库",
+  "short_name": "工程师题库",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#f5f5f5",
