@@ -509,7 +509,7 @@ function renderCurrentQuestion() {
       btn.disabled = false;
       const opt = tfOpts[i];
       if (opt) {
-        btn.dataset.value = opt.key;
+        btn.dataset.value = opt.text;
         btn.textContent = opt.text;
       }
       // Remove old listener and add new one
